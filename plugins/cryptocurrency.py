@@ -1,13 +1,16 @@
 """
 cryptocurrency.py
 
-A plugin that uses the CoinMarketCap JSON API to get values for cryptocurrencies.
+A plugin that uses the Cryptonator JSON API to get values for cryptocurrencies.
 
 Created By:
     - Luke Rogers <https://github.com/lukeroge>
+Updated by:
+    - Sri Ramanujam <https://github.com/sriramanujam>
 
 Special Thanks:
     - https://coinmarketcap-nexuist.rhcloud.com/
+    - https://www.cryptonator.com/
 
 License:
     GPL v3
@@ -19,7 +22,7 @@ import requests
 
 from cloudbot import hook
 
-API_URL = "https://coinmarketcap-nexuist.rhcloud.com/api/{}"
+API_URL = "https://api.cryptonator.com/api/ticker/{}-usd"
 
 
 # aliases
@@ -49,14 +52,14 @@ def dash():
     """ -- Returns current darkcoin/dash value """
     # alias
     return crypto_command("dash")
-    
-    
-@hook.command("zetacoin", "zet", autohelp=False)
+
+
+@hook.command("zcash", "zec", autohelp=False)
 def zet():
-    """ -- Returns current Zetacoin value """
+    """ -- Returns current Zcash value """
     # alias
-    return crypto_command("zet")
-    
+    return crypto_command("zec")
+
 
 # main command
 @hook.command("crypto", "cryptocurrency")
@@ -71,7 +74,7 @@ def crypto_command(text):
 
     data = request.json()
 
-    if "error" in data:
+    if "error" in data and data['error'] != '':
         return "{}.".format(data['error'])
 
     updated_time = datetime.fromtimestamp(data['timestamp'])
@@ -80,15 +83,14 @@ def crypto_command(text):
         # in these cases we just return a "not found" message
         return "Currency not found."
 
-    change = float(data['change'])
+    change = float(data['ticker']['change'])
     if change > 0:
-        change_str = "\x033 {}%\x0f".format(change)
+        change_str = "\x033{}%\x0f".format(change)
     elif change < 0:
-        change_str = "\x035 {}%\x0f".format(change)
+        change_str = "\x035{}%\x0f".format(change)
     else:
         change_str = "{}%".format(change)
 
-    return "{} // \x0307${:,.2f}\x0f USD - {:,.7f} BTC // {} change".format(data['symbol'].upper(),
-                                                                            float(data['price']['usd']),
-                                                                            float(data['price']['btc']),
+    return "1 {} is worth {:,.7f} USD \x03\x02|\x02\x03 {} change".format(data['ticker']['base'].upper(),
+                                                                            float(data['ticker']['price']),
                                                                             change_str)
