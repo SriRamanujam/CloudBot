@@ -6,26 +6,6 @@ import requests.exceptions
 
 from cloudbot import hook
 
-
-@hook.command("down", "offline", "up")
-def down(text):
-    """<url> - checks if <url> is online or offline
-    :type text: str
-    """
-
-    if "://" not in text:
-        text = 'http://' + text
-
-    text = 'http://' + urllib.parse.urlparse(text).netloc
-
-    try:
-        requests.get(text)
-    except requests.exceptions.ConnectionError:
-        return '{} seems to be down'.format(text)
-    else:
-        return '{} seems to be up'.format(text)
-
-
 @hook.command()
 def isup(text):
     """<url> - uses isup.me to check if <url> is online or offline
