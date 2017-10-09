@@ -10,6 +10,7 @@ from cloudbot.util.formatting import pluralize
 
 
 youtube_re = re.compile(r'(?:youtube.*?(?:v=|/v/)|youtu\.be/|yooouuutuuube.*?id=)([-_a-zA-Z0-9]+)', re.I)
+ytpl_re = re.compile(r'(.*:)//(www.youtube.com/playlist|youtube.com/playlist)(:[0-9]+)?(.*)', re.I)
 
 base_url = 'https://www.googleapis.com/youtube/v3/'
 api_url = base_url + 'videos?part=contentDetails%2C+snippet%2C+statistics&id={}&key={}'
@@ -33,36 +34,32 @@ def get_video_description(video_id):
     statistics = data[0]['statistics']
     content_details = data[0]['contentDetails']
 
-    out = '\x02{}\x02'.format(snippet['title'])
+    out = '\x02YouTube search result\x02 \x034|\x03 {}'.format(snippet['title'])
 
     if not content_details.get('duration'):
         return out
 
     length = isodate.parse_duration(content_details['duration'])
-    out += ' - length \x02{}\x02'.format(timeformat.format_time(int(length.total_seconds()), simple=True))
+    out += ' \x034|\x03 {}'.format(timeformat.format_time(int(length.total_seconds()), simple=True))
     total_votes = float(statistics['likeCount']) + float(statistics['dislikeCount'])
 
     if total_votes != 0:
         # format
-        likes = pluralize(int(statistics['likeCount']), "like")
-        dislikes = pluralize(int(statistics['dislikeCount']), "dislike")
-
         percent = 100 * float(statistics['likeCount']) / total_votes
-        out += ' - {}, {} (\x02{:.1f}\x02%)'.format(likes,
-                                                    dislikes, percent)
+        out += ' \x034|\x03 \x02{:.1f}%\x02 likes'.format(percent)
 
     if 'viewCount' in statistics:
         views = int(statistics['viewCount'])
-        out += ' - \x02{:,}\x02 view{}'.format(views, "s"[views == 1:])
+        out += ' \x034|\x03 {:,} view{}'.format(views, "s"[views == 1:])
 
     uploader = snippet['channelTitle']
 
     upload_time = time.strptime(snippet['publishedAt'], "%Y-%m-%dT%H:%M:%S.000Z")
-    out += ' - \x02{}\x02 on \x02{}\x02'.format(uploader,
+    out += ' \x034|\x03 Uploaded by \x02{}\x02 on {}'.format(uploader,
                                                 time.strftime("%Y.%m.%d", upload_time))
 
     if 'contentRating' in content_details:
-        out += ' - \x034NSFW\x02'
+        out += ' \x034|\x03 \x02NSFW\x02'
 
     return out
 
@@ -97,53 +94,10 @@ def youtube(text):
 
     video_id = json['items'][0]['id']['videoId']
 
-    return get_video_description(video_id) + " - " + video_url % video_id
+    out = get_video_description(video_id)
+    out += ' \x034|\x03 https://youtube.com/watch?v={}'.format(video_id)
 
-
-@hook.command("youtime", "ytime")
-def youtime(text):
-    """youtime <query> -- Gets the total run time of the first YouTube search result for <query>."""
-    if not dev_key:
-        return "This command requires a Google Developers Console API key."
-
-    json = requests.get(search_api_url, params={"q": text, "key": dev_key, "type": "video"}).json()
-
-    if json.get('error'):
-        if json['error']['code'] == 403:
-            return err_no_api
-        else:
-            return 'Error performing search.'
-
-    if json['pageInfo']['totalResults'] == 0:
-        return 'No results found.'
-
-    video_id = json['items'][0]['id']['videoId']
-    json = requests.get(api_url.format(video_id, dev_key)).json()
-
-    if json.get('error'):
-        return
-    data = json['items']
-    snippet = data[0]['snippet']
-    content_details = data[0]['contentDetails']
-    statistics = data[0]['statistics']
-
-    if not content_details.get('duration'):
-        return
-
-    length = isodate.parse_duration(content_details['duration'])
-    l_sec = int(length.total_seconds())
-    views = int(statistics['viewCount'])
-    total = int(l_sec * views)
-
-    length_text = timeformat.format_time(l_sec, simple=True)
-    total_text = timeformat.format_time(total, accuracy=8)
-
-    return 'The video \x02{}\x02 has a length of {} and has been viewed {:,} times for ' \
-           'a total run time of {}!'.format(snippet['title'], length_text, views,
-                                            total_text)
-
-
-ytpl_re = re.compile(r'(.*:)//(www.youtube.com/playlist|youtube.com/playlist)(:[0-9]+)?(.*)', re.I)
+    return out
 
 
 @hook.regex(ytpl_re)
@@ -164,5 +118,5 @@ def ytplaylist_url(match):
     title = snippet['title']
     author = snippet['channelTitle']
     num_videos = int(content_details['itemCount'])
-    count_videos = ' - \x02{:,}\x02 video{}'.format(num_videos, "s"[num_videos == 1:])
-    return "\x02{}\x02 {} - \x02{}\x02".format(title, count_videos, author)
+    count_videos = '\x034|\x03 {:,} video{}'.format(num_videos, "s"[num_videos == 1:])
+    return "YouTube playlist \x034|\x03 \x02{}\x02 {} \x034|\x03 Created by \x02{}\x02".format(title, count_videos, author)
