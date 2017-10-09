@@ -7,6 +7,9 @@ Module requires a Google Custom Search API key and a Custom Search Engine ID in 
 Created By:
     - Foxlet <http://furcode.tk/>
 
+Modified by:
+    - Sri Ramanujam <http://github.com/sriramanujam>
+
 License:
     GNU General Public License (Version 3)
 """
@@ -29,7 +32,7 @@ def load_api(bot):
     dev_key = bot.config.get("api_keys", {}).get("google_dev_key", None)
     cx = bot.config.get("api_keys", {}).get("google_cse_id", None)
 
-@hook.command('g', 'google', 'gse')
+@hook.command('g', 'google')
 def gse(text):
     """<query> -- Returns first Google search result for <query>."""
     if not dev_key:
@@ -50,11 +53,13 @@ def gse(text):
     if not content:
         content = "No description available."
     else:
-        content = formatting.truncate_str(content.replace('\n', ''), 150)
+        content = formatting.truncate_str(content.replace('\n', ''), 240)
 
-    return u'{} -- \x02{}\x02: "{}"'.format(result['link'], title, content)
+    return u'\x02Google search result\x02 for \x02{}\x02 \x02\x0312|\x03\x02 {} · {} \x02\x0312|\x03\x02 {}'.format(
+            text, title, content, result['link'])
 
-@hook.command('gis','image', 'googleimage')
+
+@hook.command('gis', 'googleimage')
 def gse_gis(text):
     """<query> -- Returns first Google Images result for <query>."""
     if not dev_key:
@@ -66,11 +71,8 @@ def gse_gis(text):
 
     try:
         result = parsed['items'][0]
-        metadata = parsed['items'][0]['image']
     except KeyError:
         return "No results found."
 
-    dimens = '{}x{}px'.format(metadata['width'], metadata['height'])
-    size = filesize.size(int(metadata['byteSize']))
+    return u'\x02Google image result\x02 for \x02{}\x02 \x02\x0312|\x03\x02 {}'.format(text, result['link'])
 
-    return u'{} [{}, {}, {}]'.format(result['link'], dimens, result['mime'], size)
