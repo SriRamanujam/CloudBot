@@ -17,15 +17,11 @@ def load_api(bot):
     consumer_key = bot.config.get("api_keys", {}).get("twitter_consumer_key", None)
     consumer_secret = bot.config.get("api_keys", {}).get("twitter_consumer_secret", None)
 
-    oauth_token = bot.config.get("api_keys", {}).get("twitter_access_token", None)
-    oauth_secret = bot.config.get("api_keys", {}).get("twitter_access_secret", None)
-
-    if not all((consumer_key, consumer_secret, oauth_token, oauth_secret)):
+    if not all((consumer_key, consumer_secret)):
         tw_api = None
         return
     else:
         auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-        auth.set_access_token(oauth_token, oauth_secret)
 
         tw_api = tweepy.API(auth)
 
@@ -58,7 +54,7 @@ def twitter_url(match):
     return "{}@\x02{}\x02 ({}): {} ({} ago)".format(prefix, user.screen_name, user.name, text, time)
 
 
-@hook.command("twitter", "tw", "twatter")
+@hook.command("twitter", "tw")
 def twitter(text):
     """twitter <user> [n] -- Gets last/[n]th tweet from <user>"""
 
