@@ -21,7 +21,7 @@ short_url = "http://redd.it/{}"
 
 def format_output(item, show_url=False, prefix=None):
     """ takes a reddit post and returns a formatted string"""
-    item['prefix'] = prefix
+    item['prefix'] = prefix if prefix is not None else ''
     raw_time = datetime.fromtimestamp(int(item['created_utc']))
     item['timesince'] = timeformat.time_since(raw_time, count=1, simple=True)
     if item['is_self'] is False or show_url is True:
