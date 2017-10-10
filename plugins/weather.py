@@ -64,7 +64,7 @@ def on_start(bot):
     forecast_io_key = bot.config.get("api_keys", {}).get("forecast_io", None)
 
 
-@hook.command("weather", "we")
+@hook.command("weather", "w")
 def weather(text, reply):
     """weather <location>:<units>. Units can be one of [us, si, ca, uk, both]. Defaults to us"""
     if not forecast_io_key:
