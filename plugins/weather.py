@@ -11,7 +11,7 @@ class APIError(Exception):
 google_base = 'https://maps.googleapis.com/maps/api/'
 geocode_api = google_base + 'geocode/json'
 
-wunder_api = "http://api.wunderground.com/api/{}/forecast/geolookup/conditions/q/{}.json"
+forecast_io_api = "https://api.forecast.io/forecast/{}/{}?units={}"
 
 # Change this to a ccTLD code (eg. uk, nz) to make results more targeted towards that specific country.
 # <https://developers.google.com/maps/documentation/geocoding/#RegionCodes>
@@ -59,66 +59,40 @@ def find_location(location):
 @hook.on_start
 def on_start(bot):
     """ Loads API keys """
-    global dev_key, wunder_key
+    global dev_key, forecast_io_key
     dev_key = bot.config.get("api_keys", {}).get("google_dev_key", None)
-    wunder_key = bot.config.get("api_keys", {}).get("wunderground", None)
+    forecast_io_key = bot.config.get("api_keys", {}).get("forecast_io", None)
 
 
 @hook.command("weather", "we")
 def weather(text, reply):
-    """weather <location> -- Gets weather data for <location>."""
-    if not wunder_key:
-        return "This command requires a Weather Underground API key."
+    """weather <location>:<units>. Units can be one of [us, si, ca, uk, both]. Defaults to us"""
+    if not forecast_io_key:
+        return "This command requires a forecast.io API key."
     if not dev_key:
         return "This command requires a Google Developers Console API key."
 
+    if not text:
+        return "Saved weather coming soon! Hold on to your butts."
+    else:
+        parts = text.split(':')
+        location, *measure_type = parts
+
+    if measure_type and measure_type[0] not in ['us', 'si', 'ca', 'uk', 'both']:
+        return "Invalid units. Please pick from one of [us, si, ca, uk, both]."
+
     # use find_location to get location data from the user input
     try:
-        location_data = find_location(text)
+        location_data = find_location(location)
     except APIError as e:
         return e
 
     formatted_location = "{lat},{lng}".format(**location_data)
 
-    url = wunder_api.format(wunder_key, formatted_location)
+    url = forecast_io_api.format(forecast_io_key, formatted_location,
+            measure_type[0] if measure_type else 'us')
     response = requests.get(url).json()
 
-    if response['response'].get('error'):
-        return "{}".format(response['response']['error']['description'])
+    reply("Forecast for \x02{}\x02 \x02\x033|\x03\x02 {}".format(location,
+        response['daily']['summary']))
 
-    forecast_today = response["forecast"]["simpleforecast"]["forecastday"][0]
-    forecast_tomorrow = response["forecast"]["simpleforecast"]["forecastday"][1]
-
-    # put all the stuff we want to use in a dictionary for easy formatting of the output
-    weather_data = {
-        "place": response['current_observation']['display_location']['full'],
-        "conditions": response['current_observation']['weather'],
-        "temp_f": response['current_observation']['temp_f'],
-        "temp_c": response['current_observation']['temp_c'],
-        "humidity": response['current_observation']['relative_humidity'],
-        "wind_kph": response['current_observation']['wind_kph'],
-        "wind_mph": response['current_observation']['wind_mph'],
-        "wind_direction": response['current_observation']['wind_dir'],
-        "today_conditions": forecast_today['conditions'],
-        "today_high_f": forecast_today['high']['fahrenheit'],
-        "today_high_c": forecast_today['high']['celsius'],
-        "today_low_f": forecast_today['low']['fahrenheit'],
-        "today_low_c": forecast_today['low']['celsius'],
-        "tomorrow_conditions": forecast_tomorrow['conditions'],
-        "tomorrow_high_f": forecast_tomorrow['high']['fahrenheit'],
-        "tomorrow_high_c": forecast_tomorrow['high']['celsius'],
-        "tomorrow_low_f": forecast_tomorrow['low']['fahrenheit'],
-        "tomorrow_low_c": forecast_tomorrow['low']['celsius']
-    }
-
-    # Get the more accurate URL if available, if not, get the generic one.
-    if "?query=," in response["current_observation"]['ob_url']:
-        weather_data['url'] = web.shorten(response["current_observation"]['forecast_url'])
-    else:
-        weather_data['url'] = web.shorten(response["current_observation"]['ob_url'])
-
-    reply("{place} - \x02Current:\x02 {conditions}, {temp_f}F/{temp_c}C, {humidity}, "
-          "Wind: {wind_mph}MPH/{wind_kph}KPH {wind_direction}, \x02Today:\x02 {today_conditions}, "
-          "High: {today_high_f}F/{today_high_c}C, Low: {today_low_f}F/{today_low_c}C. "
-          "\x02Tomorrow:\x02 {tomorrow_conditions}, High: {tomorrow_high_f}F/{tomorrow_high_c}C, "
-          "Low: {tomorrow_low_f}F/{tomorrow_low_c}C - {url}".format(**weather_data))
