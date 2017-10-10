@@ -70,7 +70,8 @@ def urban(text):
 
         url = definition['permalink']
 
-        output = "[{}/{}] {} - {}".format(id_num, len(definitions), def_text, url)
+        output = u'Urban Dictionary: \x02{}\x02 (Definition {} of {}) \x02\x035|\x03\x02 {} \x02\x035|\x03\x02 {}'.format(
+                text, id_num, len(definitions), def_text, url)
 
     else:
         definition = random.choice(definitions)
@@ -80,6 +81,7 @@ def urban(text):
 
         name = definition['word']
         url = definition['permalink']
-        output = "\x02{}\x02: {} - {}".format(name, def_text, url)
+        output = u'Random Urban Dictionary: \x02{}\x02 \x02\x035|\x03\x02 {} \x02\x035|\x03\x02 {}'.format(
+                name, def_text, url)
 
     return output
