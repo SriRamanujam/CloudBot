@@ -71,8 +71,8 @@ def load_key(bot):
 
 
 @hook.regex(youtube_re)
-def youtube_url(match):
-    return get_video_description(match.group(1))
+def youtube_url(match, message):
+    message(get_video_description(match.group(1)))
 
 
 @hook.command("youtube", "you", "yt", "y")
@@ -101,7 +101,7 @@ def youtube(text):
 
 
 @hook.regex(ytpl_re)
-def ytplaylist_url(match):
+def ytplaylist_url (match, message):
     location = match.group(4).split("=")[-1]
     json = requests.get(playlist_api_url, params={"id": location, "key": dev_key}).json()
 
@@ -119,4 +119,4 @@ def ytplaylist_url(match):
     author = snippet['channelTitle']
     num_videos = int(content_details['itemCount'])
     count_videos = '\x034|\x03 {:,} video{}'.format(num_videos, "s"[num_videos == 1:])
-    return "YouTube playlist \x034|\x03 \x02{}\x02 {} \x034|\x03 Created by \x02{}\x02".format(title, count_videos, author)
+    message("YouTube playlist \x034|\x03 \x02{}\x02 {} \x034|\x03 Created by \x02{}\x02".format(title, count_videos, author))
