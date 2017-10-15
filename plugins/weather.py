@@ -56,6 +56,26 @@ def find_location(location):
     return json['results'][0]['geometry']['location'], json['results'][0]['formatted_address']
 
 
+def _parse_weather_output(weather_data, location):
+    w_dict = {}
+
+    w_dict['location'] = location
+    w_dict['summary'] = weather_data['currently']['summary']
+    w_dict['humidity'] = weather_data['currently']['humidity'] * 100
+    w_dict['precip_chance'] = weather_data['currently']['precipProbability'] * 100
+    w_dict['daily_summary'] = weather_data['daily']['summary']
+
+    ## Build a string that has both measurement systems.
+    w_dict['temp_f'] = round(weather_data['currently']['temperature'], 2)
+    w_dict['temp_c'] = round((weather_data['currently']['temperature'] - 32) * 5/9, 2)
+    w_dict['feelslike_f'] = round(weather_data['currently']['apparentTemperature'], 2)
+    w_dict['feelslike_c'] = round((weather_data['currently']['apparentTemperature'] - 32) * 5/9, 2)
+    w_dict['windspeed_mph'] = round(weather_data['currently']['windSpeed'], 2)
+    w_dict['windspeed_ms'] = round(weather_data['currently']['windSpeed'] * .44704, 2)
+
+    return "Current weather in \x02{location}\x02 \x02\x033|\x03\x02 {summary}, {temp_f}°F ({temp_c}°C) feels like {feelslike_f}°F ({feelslike_c}°C), {humidity}% humidity, wind speed {windspeed_mph} mph ({windspeed_ms} m/s), {precip_chance}% chance of precipitation. Today's forecast: {daily_summary}".format(**w_dict)
+
+
 @hook.on_start
 def on_start(bot):
     """ Loads API keys """
@@ -64,7 +84,7 @@ def on_start(bot):
     forecast_io_key = bot.config.get("api_keys", {}).get("forecast_io", None)
 
 
-@hook.command("weather", "w")
+@hook.command("weather", "w", autohelp=False)
 def weather(text, reply):
     """weather <location>:<units>. Units can be one of [us, si, ca, uk, both]. Defaults to us"""
     if not forecast_io_key:
@@ -93,6 +113,5 @@ def weather(text, reply):
             measure_type[0] if measure_type else 'us')
     response = requests.get(url).json()
 
-    reply("Forecast for \x02{}\x02 \x02\x033|\x03\x02 {}".format(formatted_address,
-        response['daily']['summary']))
+    reply(_parse_weather_output(response, formatted_address))
 
