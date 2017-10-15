@@ -41,7 +41,7 @@ def get_account(nick):
     return last_account
 
 
-@hook.command("lastfm", "last", "np", "l", autohelp=False)
+@hook.command("lastfm", "np", autohelp=False)
 def lastfm(text, nick, db, bot, notice):
     """[user] [dontsave] - displays the now playing (or last played) track of LastFM user [user]"""
     api_key = bot.config.get("api_keys", {}).get("lastfm")
