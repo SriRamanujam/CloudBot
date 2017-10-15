@@ -20,7 +20,7 @@ video_url = "http://youtu.be/%s"
 err_no_api = "The YouTube API is off in the Google Developers Console."
 
 
-def get_video_description(video_id):
+def get_video_description(video_id, prefix=None):
     json = requests.get(api_url.format(video_id, dev_key)).json()
 
     if json.get('error'):
@@ -34,7 +34,7 @@ def get_video_description(video_id):
     statistics = data[0]['statistics']
     content_details = data[0]['contentDetails']
 
-    out = '\x02YouTube search result\x02 \x034|\x03 {}'.format(snippet['title'])
+    out = '\x02{}\x02 \x034|\x03 {}'.format(prefix if prefix else "Youtube", snippet['title'])
 
     if not content_details.get('duration'):
         return out
@@ -94,7 +94,7 @@ def youtube(text):
 
     video_id = json['items'][0]['id']['videoId']
 
-    out = get_video_description(video_id)
+    out = get_video_description(video_id, 'Youtube search result')
     out += ' \x034|\x03 https://youtube.com/watch?v={}'.format(video_id)
 
     return out
