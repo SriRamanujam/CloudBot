@@ -93,6 +93,6 @@ def weather(text, reply):
             measure_type[0] if measure_type else 'us')
     response = requests.get(url).json()
 
-    reply("Forecast for \x02{}\x02 \x02\x033|\x03\x02 {}".format(location,
+    reply("Forecast for \x02{}\x02 \x02\x033|\x03\x02 {}".format(location_data['formatted_address'],
         response['daily']['summary']))
 
