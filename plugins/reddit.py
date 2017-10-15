@@ -136,7 +136,7 @@ def reddit(text, bot, loop):
             length = len(data)
             return "Invalid post number. Number must be between 1 and {}.".format(length)
     else:
-        item = random.choice(data)["data"]
+        item = data[0]["data"]
 
     if len(parts) > 1:
         prefix = 'Top reddit post in \x02r/{}\x02'.format(parts[0].strip())
