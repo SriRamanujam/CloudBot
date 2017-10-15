@@ -41,7 +41,7 @@ def find_location(location):
     """
     Takes a location as a string, and returns a dict of data
     :param location: string
-    :return: dict
+    :return: dict, string
     """
     params = {"address": location, "key": dev_key}
     if bias:
@@ -53,7 +53,7 @@ def find_location(location):
     if error:
         raise APIError(error)
 
-    return json['results'][0]['geometry']['location']
+    return json['results'][0]['geometry']['location'], json['results'][0]['formatted_address']
 
 
 @hook.on_start
@@ -83,7 +83,7 @@ def weather(text, reply):
 
     # use find_location to get location data from the user input
     try:
-        location_data = find_location(location)
+        location_data, formatted_address = find_location(location)
     except APIError as e:
         return e
 
@@ -93,6 +93,6 @@ def weather(text, reply):
             measure_type[0] if measure_type else 'us')
     response = requests.get(url).json()
 
-    reply("Forecast for \x02{}\x02 \x02\x033|\x03\x02 {}".format(location_data['formatted_address'],
+    reply("Forecast for \x02{}\x02 \x02\x033|\x03\x02 {}".format(formatted_address,
         response['daily']['summary']))
 
