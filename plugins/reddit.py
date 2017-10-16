@@ -1,5 +1,6 @@
 from datetime import datetime
 import re
+import math
 import random
 import asyncio
 import functools
@@ -88,7 +89,7 @@ def reddit_url(match, bot):
 @asyncio.coroutine
 @hook.command('reddit', 'r', autohelp=False)
 def reddit(text, bot, loop):
-    """<subreddit> [n] <time> - for time period <time>, gets a random post from <subreddit>, or gets the [n]th post in the subreddit"""
+    """<subreddit>:[n]:<time> - for time period <time>, gets a random post from <subreddit>, or gets the [n]th post in the subreddit"""
     id_num = None
     time_period = ''
     prefix=None
@@ -97,7 +98,7 @@ def reddit(text, bot, loop):
 
     if text:
         # clean and split the input
-        parts = text.lower().strip().split()
+        parts = text.lower().strip().split(':')
 
         # find the requested post number and time period (if any)
         if len(parts) > 1:
@@ -115,7 +116,6 @@ def reddit(text, bot, loop):
             except IndexError:
                 pass
         else:
-            print(parts[0])
             url = base_url.format(parts[0].strip())
     else:
         url = "http://reddit.com/.json"
@@ -126,24 +126,28 @@ def reddit(text, bot, loop):
         data = inquiry.json()
     except Exception as e:
         return "Error: " + str(e)
-    data = data["data"]["children"]
 
-    # get the requested/random post
+    # filter out stickies
+    data = [item for item in data["data"]["children"] if item['data']['stickied'] is not True]
+
     if id_num is not None:
         try:
             item = data[id_num]["data"]
         except IndexError:
-            length = len(data)
-            return "Invalid post number. Number must be between 1 and {}.".format(length)
+            return "Invalid post number. Number must be between 1 and {}.".format(len(data))
     else:
         item = data[0]["data"]
 
-    if len(parts) > 1:
-        prefix = 'Top reddit post in \x02r/{}\x02'.format(parts[0].strip())
-        if time_period == 'all':
-            prefix += ' of all time'
-        elif time_period != '':
-            prefix += ' in the past {}'.format(time_period[3:])
-        prefix += ' \x037|\x03 '
+    if id_num is None:
+        id_num = 0
+
+    ordinal = lambda n: " %d%s" % (n,"tsnrhtdd"[(math.floor(n/10)%10!=1)*(n%10<4)*n%10::4])
+    prefix = 'Top{} reddit post in \x02r/{}\x02'.format(ordinal(id_num + 1) if id_num != 0 else '', parts[0].strip())
+    if time_period == 'all':
+        prefix += ' of all time'
+    elif time_period != '':
+        prefix += ' in the past {}'.format(time_period)
+    prefix += ' \x037|\x03 '
 
     return format_output(item, show_url=True, prefix=prefix)
+
