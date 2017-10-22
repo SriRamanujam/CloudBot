@@ -28,7 +28,7 @@ def load_cache(db):
     """
     global tell_cache
     tell_cache = []
-    for row in db.execute(table.select().where(table.c.is_read == 0)):
+    for row in db.execute(table.select().where(table.c.is_read == False)):
         conn = row["connection"]
         target = row["target"]
         tell_cache.append((conn, target))
@@ -38,7 +38,7 @@ def get_unread(db, server, target):
     query = select([table.c.sender, table.c.message, table.c.time_sent]) \
         .where(table.c.connection == server.lower()) \
         .where(table.c.target == target.lower()) \
-        .where(table.c.is_read == 0) \
+        .where(table.c.is_read == False) \
         .order_by(table.c.time_sent)
     return db.execute(query).fetchall()
 
@@ -47,7 +47,7 @@ def count_unread(db, server, target):
     query = select([table]) \
         .where(table.c.connection == server.lower()) \
         .where(table.c.target == target.lower()) \
-        .where(table.c.is_read == 0) \
+        .where(table.c.is_read == False) \
         .alias("count") \
         .count()
     return db.execute(query).fetchone()[0]
@@ -57,8 +57,8 @@ def read_all_tells(db, server, target):
     query = table.update() \
         .where(table.c.connection == server.lower()) \
         .where(table.c.target == target.lower()) \
-        .where(table.c.is_read == 0) \
-        .values(is_read=1)
+        .where(table.c.is_read == False) \
+        .values(is_read=True)
     db.execute(query)
     db.commit()
     load_cache(db)
@@ -68,7 +68,7 @@ def read_tell(db, server, target, message):
         .where(table.c.connection == server.lower()) \
         .where(table.c.target == target.lower()) \
         .where(table.c.message == message) \
-        .values(is_read=1)
+        .values(is_read=True)
     db.execute(query)
     db.commit()
     load_cache(db)
