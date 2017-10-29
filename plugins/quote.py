@@ -1,175 +1,96 @@
+import urllib.parse
+import datetime
 import random
 import re
 import time
 
+import requests
 from cloudbot import hook
 from cloudbot.util import database
 
 from sqlalchemy import select
-from sqlalchemy import Table, Column, String, PrimaryKeyConstraint
-from sqlalchemy.types import REAL
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import Table, DateTime, Column, String, PrimaryKeyConstraint, Text
+from sqlalchemy.orm import mapper
+import sqlalchemy.sql
 
-
-qtable = Table(
+table = Table(
     'quote',
     database.metadata,
     Column('chan', String(25)),
-    Column('nick', String(25)),
     Column('add_nick', String(25)),
-    Column('msg', String(500)),
-    Column('time', REAL),
-    Column('deleted', String(5), default=0),
-    PrimaryKeyConstraint('chan', 'nick', 'time')
+    Column('msg', Text),
+    Column('time', DateTime),
+    PrimaryKeyConstraint('chan', 'msg')
 )
 
+class Quote(object):
+    def __init__(self, chan, add_nick, msg, time):
+        self.chan = chan
+        self.add_nick = add_nick
+        self.msg = msg
+        self.time = time
 
-def format_quote(q, num, n_quotes):
-    """Returns a formatted string of a quote"""
-    ctime, nick, msg = q
-    return "[{}/{}] <{}> {}".format(num, n_quotes,
-                                    nick, msg)
-
-
-def add_quote(db, chan, target, sender, message):
-    """Adds a quote to a nick, returns message string"""
-    try:
-        query = qtable.insert().values(
-            chan=chan,
-            nick=target.lower(),
-            add_nick=sender.lower(),
-            msg=message,
-            time=time.time()
-        )
-        db.execute(query)
-        db.commit()
-    except IntegrityError:
-        return "Message already stored, doing nothing."
-    return "Quote added."
+    def __repr__(self):
+        return "Quote by {}, added by {} at {}: {}".format(self.chan, self.add_nick, self.time, self.msg)
 
 
-def del_quote(db, nick, msg):
-    """Deletes a quote from a nick"""
-    query = qtable.update() \
-        .where(qtable.c.chan == 1) \
-        .where(qtable.c.nick == nick.lower()) \
-        .where(qtable.c.msg == msg) \
-        .values(deleted=1)
-    db.execute(query)
+mapper(Quote, table)
+
+@hook.command('qadd')
+def qadd(text, nick, chan, db, notice):
+    db.add(Quote(chan, nick, text, sqlalchemy.sql.func.now()))
     db.commit()
+    num_quotes = db.query(Quote).filter(Quote.chan==chan).count()
+    notice("Quote {} added!".format(num_quotes))
 
 
-def get_quote_num(num, count, name):
-    """Returns the quote number to fetch from the DB"""
-    if num:  # Make sure num is a number if it isn't false
-        num = int(num)
-    if count == 0:  # Error on no quotes
-        raise Exception("No quotes found for {}.".format(name))
-    if num and num < 0:  # Count back if possible
-        num = count + num + 1 if num + count > -1 else count + 1
-    if num and num > count:  # If there are not enough quotes, raise an error
-        raise Exception("I only have {} quote{} for {}.".format(count, ('s', '')[count == 1], name))
-    if num and num == 0:  # If the number is zero, set it to one
-        num = 1
-    if not num:  # If a number is not given, select a random one
-        num = random.randint(1, count)
-    return num
+@hook.command('qlist', autohelp=False)
+def list_quotes(db, reply, chan):
+    """.qlist - Gives you a link to the full quote list for this channel"""
+    query = db.query(Quote).filter(Quote.chan==chan).order_by(Quote.time)
+    td = datetime.datetime.now().strftime("%B %d, %Y %X")
+    lines = "===================================Quote list for channel " + chan + " as of " + td + " Eastern===================================\n"
+
+    for index, quote in enumerate(query.all()):
+        lines = lines + urllib.parse.quote("Quote {} : {}".format(
+                index + 1, quote.msg))
+
+    req = requests.post('http://sprunge.us', 'sprunge={}'.format(lines))
+    url = req.content.decode('utf-8')
+
+    reply('Quote list: {}'.format(url))
 
 
-def get_quote_by_nick(db, nick, num=False):
-    """Returns a formatted quote from a nick, random or selected by number"""
+@hook.command('q', 'quote', autohelp=False)
+def quote(text, nick, chan, db, message, reply):
+    """.quote [#] - fetch quote from channel."""
+    query = db.query(Quote).filter(Quote.chan==chan).order_by(Quote.time) # start building query object
 
-    count_query = select([qtable]) \
-        .where(qtable.c.deleted != 1) \
-        .where(qtable.c.nick == nick.lower()) \
-        .count()
-    count = db.execute(count_query).fetchall()[0][0]
+    sub_dict = {
+        'total': query.count(),
+        'qnum': None,
+        'qtext': None
+    }
 
-    try:
-        num = get_quote_num(num, count, nick)
-    except Exception as error_message:
-        return error_message
+    quotes = query.all()
+    if text:
+        try:
+            qnum = int(text)
+            # specific number quote
+            sub_dict['qnum'] = qnum
+            try:
+                sub_dict['qtext'] = quotes[qnum - 1].msg
+            except IndexError:
+                reply("Quote with that number doesn't exist.")
+                return
+        except ValueError:
+            # treat text like a search phrase
+            reply("Quote searching will come along eventually, once I decide how to do it. In the meantime, use .qlist to find your quote.")
+            return
+    else:
+        # random quote
+        sub_dict['qnum'] = qnum = random.randint(0, sub_dict['total'] - 1)
+        sub_dict['qtext'] = quotes[qnum].msg
 
-    query = select([qtable.c.time, qtable.c.nick, qtable.c.msg]) \
-        .where(qtable.c.deleted != 1) \
-        .where(qtable.c.nick == nick.lower()) \
-        .order_by(qtable.c.time)\
-        .limit(1) \
-        .offset((num - 1))
-    data = db.execute(query).fetchall()[0]
-    return format_quote(data, num, count)
+    message("Quote \x02{qnum}/{total}\x02 \x02\x036|\x03\x02 {qtext}".format(**sub_dict))
 
-
-def get_quote_by_nick_chan(db, chan, nick, num=False):
-    """Returns a formatted quote from a nick in a channel, random or selected by number"""
-    count_query = select([qtable]) \
-        .where(qtable.c.deleted != 1) \
-        .where(qtable.c.chan == chan) \
-        .where(qtable.c.nick == nick.lower()) \
-        .count()
-    count = db.execute(count_query).fetchall()[0][0]
-
-    try:
-        num = get_quote_num(num, count, nick)
-    except Exception as error_message:
-        return error_message
-
-    query = select([qtable.c.time, qtable.c.nick, qtable.c.msg]) \
-        .where(qtable.c.deleted != 1) \
-        .where(qtable.c.chan == chan) \
-        .where(qtable.c.nick == nick.lower()) \
-        .order_by(qtable.c.time) \
-        .limit(1) \
-        .offset((num - 1))
-    data = db.execute(query).fetchall()[0]
-    return format_quote(data, num, count)
-
-
-def get_quote_by_chan(db, chan, num=False):
-    """Returns a formatted quote from a channel, random or selected by number"""
-    count_query = select([qtable]) \
-        .where(qtable.c.deleted != 1) \
-        .where(qtable.c.chan == chan) \
-        .count()
-    count = db.execute(count_query).fetchall()[0][0]
-
-    try:
-        num = get_quote_num(num, count, chan)
-    except Exception as error_message:
-        return error_message
-
-    query = select([qtable.c.time, qtable.c.nick, qtable.c.msg]) \
-        .where(qtable.c.deleted != 1) \
-        .where(qtable.c.chan == chan) \
-        .order_by(qtable.c.time)\
-        .limit(1) \
-        .offset((num - 1))
-    data = db.execute(query).fetchall()[0]
-    return format_quote(data, num, count)
-
-
-@hook.command('q', 'quote')
-def quote(text, nick, chan, db, notice):
-    """[#chan] [nick] [#n] OR add <nick> <message> - gets the [#n]th quote by <nick> (defaulting to random)
-    OR adds <message> as a quote for <nick> in the caller's channel"""
-
-    add = re.match(r"add[^\w@]+(\S+?)>?\s+(.*)", text, re.I)
-    retrieve = re.match(r"(\S+)(?:\s+#?(-?\d+))?$", text)
-    retrieve_chan = re.match(r"(#\S+)\s+(\S+)(?:\s+#?(-?\d+))?$", text)
-
-    if add:
-        quoted_nick, msg = add.groups()
-        notice(add_quote(db, chan, quoted_nick, nick, msg))
-        return
-    elif retrieve:
-        selected, num = retrieve.groups()
-        by_chan = True if selected.startswith('#') else False
-        if by_chan:
-            return get_quote_by_chan(db, selected, num)
-        else:
-            return get_quote_by_nick(db, selected, num)
-    elif retrieve_chan:
-        chan, nick, num = retrieve_chan.groups()
-        return get_quote_by_nick_chan(db, chan, nick, num)
-
-    notice(quote.__doc__)
