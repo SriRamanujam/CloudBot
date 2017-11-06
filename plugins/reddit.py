@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 import math
 import random
@@ -7,10 +7,14 @@ import functools
 import urllib.parse
 from html.parser import HTMLParser
 
+from sqlalchemy import Table, Column, String, DateTime, PrimaryKeyConstraint
+from sqlalchemy.sql import select
+from sqlalchemy.orm import mapper
+
 import requests
 
 from cloudbot import hook
-from cloudbot.util import timeformat, formatting
+from cloudbot.util import timeformat, formatting, database
 
 
 reddit_re = re.compile(r'.*(((www\.)?reddit\.com/r|redd\.it)[^ ]+)', re.I)
@@ -18,6 +22,66 @@ reddit_re = re.compile(r'.*(((www\.)?reddit\.com/r|redd\.it)[^ ]+)', re.I)
 base_url = "http://reddit.com/r/{}/.json"
 top_url = "http://reddit.com/r/{}/top/.json?t={}"
 short_url = "http://redd.it/{}"
+
+subreddit_cache = []
+
+table = Table(
+    'reddit',
+    database.metadata,
+    Column('connection', String(25)),
+    Column('channel', String(25)),
+    Column('subreddit', String(100)),
+    Column('latest', DateTime),
+    PrimaryKeyConstraint('channel', 'subreddit')
+)
+
+class Reddit(object):
+    def __init__(self, connection, channel, subreddit, latest):
+        self.connection = connection
+        self.channel = channel
+        self.subreddit = subreddit
+        self.latest = latest
+
+    def __repr__(self):
+        return "/r/{}, active in channel {} on connection {}, latest post at {}".format(self.subreddit, self.channel, self.connection, self.latest)
+
+mapper(Reddit, table)
+
+@asyncio.coroutine
+@hook.periodic(120, initial_interval=120)
+def check_subreddits(bot, async, db, loop):
+    """
+    type db: sqlalchemy.orm.Session
+    """
+    headers = {'User-Agent': bot.user_agent}
+
+    for subreddit in db.query(Reddit).all():
+        print("REDDIT: processing subreddit {}".format(subreddit))
+        url = 'https://reddit.com/r/{}/new/.json'.format(subreddit.subreddit)
+        try:
+            # Again, identify with Reddit using an User Agent, otherwise get a 429
+            inquiry = yield from loop.run_in_executor(None, functools.partial(requests.get, url, headers=headers))
+            data = inquiry.json()
+        except Exception as e:
+            print("REDDIT: we couldn't do fetching: {}".format(e))
+            continue
+        new_posts = [item for item in data["data"]["children"] if datetime.fromtimestamp(item['data']['created_utc']) > subreddit.latest]
+
+        print("REDDIT: new posts: {}".format(new_posts))
+
+        if len(new_posts) > 0:
+            conn = bot.connections[subreddit.connection]
+
+            # we have new posts
+            subreddit.latest = datetime.fromtimestamp(new_posts[0]['data']['created_utc'])
+
+            print("REDDIT: printing {} posts now to channel {}....".format(len(new_posts), subreddit.channel))
+            print("REDDIT: latest post is {}".format(subreddit.latest))
+
+            for post in new_posts:
+                conn.message(subreddit.channel, format_output(post['data'], prefix='New submission to \x02r/{}\x02 \x037|\x03 '.format(subreddit.subreddit)))
+            db.add(subreddit)
+            yield from async(db.commit)
 
 
 def format_output(item, show_url=False, prefix=None):
@@ -39,32 +103,7 @@ def format_output(item, show_url=False, prefix=None):
     else:
         item['warning'] = ''
 
-    return '{prefix}{title} by \x02u/{author}\x02 \x037|\x03 {upvotes}, {comments} \x037|\x03 Submitted {timesince} ago \x037|\x03 {link}{warning}'.format(**item)
-
-
-
-def format_output_old(item, show_url=False):
-    """ takes a reddit post and returns a formatted string """
-    item["title"] = formatting.truncate(item["title"], 70)
-    item["link"] = short_url.format(item["id"])
-
-    raw_time = datetime.fromtimestamp(int(item["created_utc"]))
-    item["timesince"] = timeformat.time_since(raw_time, count=1, simple=True)
-
-    item["comments"] = formatting.pluralize(item["num_comments"], 'comment')
-    item["points"] = formatting.pluralize(item["score"], 'point')
-
-    if item["over_18"]:
-        item["warning"] = " \x02NSFW\x02"
-    else:
-        item["warning"] = ""
-
-    if show_url:
-        return "\x02{title} : {subreddit}\x02 - {comments}, {points}" \
-               " - \x02{author}\x02 {timesince} ago - {link}{warning}".format(**item)
-    else:
-        return "\x02{title} : {subreddit}\x02 - {comments}, {points}" \
-               " - \x02{author}\x02, {timesince} ago{warning}".format(**item)
+    return '{prefix}{title} by \x02u/{author}\x02 \x037|\x03 {upvotes}, {comments} \x037|\x03 Submitted {timesince} ago \x037|\x03 {link} \x037|\x03 {url}{warning}'.format(**item)
 
 
 @hook.regex(reddit_re)
