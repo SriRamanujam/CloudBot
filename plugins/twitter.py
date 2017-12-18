@@ -110,16 +110,6 @@ def twitter(text):
         except IndexError:
             tweet_count = len(user_timeline)
             return "The user \x02{}\x02 only has \x02{}\x02 tweets.".format(user.screen_name, tweet_count)
-
-    elif re.match(r'^#\w+$', text):
-        # user is searching by hashtag
-        search = tw_api.search(text)
-
-        if not search:
-            return "No tweets found."
-
-        tweet = random.choice(search)
-        user = tweet.user
     else:
         # ???
         return "Invalid Input"
@@ -171,3 +161,29 @@ def twuser(text):
     return "{}@\x02{}\x02 ({}){} has \x02{:,}\x02 tweets and \x02{:,}\x02 followers.{}" \
            "".format(prefix, user.screen_name, user.name, loc_str, user.statuses_count, user.followers_count,
                      desc_str)
+
+
+@hook.command("tws", "twsearch")
+def twsearch(text):
+    """tws <search term> -- Search twitter for things. Works exactly like search.twitter.com except you only get the newest result"""
+
+    if tw_api is None:
+        return
+
+    try:
+        results = tw_api.search(text)
+    except tweepy.error.TweepError as e:
+        return "Error: {}".format(e.reason)
+
+    tweet = results[0]
+    user = tweet.user
+    text = " ".join(tweet.text.split())
+
+    if user.verified:
+        prefix = "\u2713"
+    else:
+        prefix = ""
+
+    time = timeformat.time_since(tweet.created_at, datetime.utcnow())
+
+    return "Twitter search result: {}@\x02{}\x02 ({}): {} ({} ago)".format(prefix, user.screen_name, user.name, text, time)
