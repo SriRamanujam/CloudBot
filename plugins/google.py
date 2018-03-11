@@ -1,46 +1,79 @@
-import random
+"""
+google.py
 
-from cloudbot.util import http, formatting
+Originally for RoboCop 2, a replacement after Google's deprecation of Google Web Search API
+Module requires a Google Custom Search API key and a Custom Search Engine ID in order to function.
 
+Created By:
+    - Foxlet <http://furcode.tk/>
 
-def api_get(kind, query):
-    """Use the RESTful Google Search API"""
-    url = 'http://ajax.googleapis.com/ajax/services/search/%s?' \
-          'v=1.0&safe=moderate'
-    return http.get_json(url % kind, q=query)
+Modified by:
+    - Sri Ramanujam <http://github.com/sriramanujam>
 
-
-# @hook.command("googleimage", "gis", "image")
-def googleimage(text):
-    """<query> - returns the first google image result for <query>"""
-
-    parsed = api_get('images', text)
-    if not 200 <= parsed['responseStatus'] < 300:
-        raise IOError('error searching for images: {}: {}'.format(parsed['responseStatus'], ''))
-    if not parsed['responseData']['results']:
-        return 'no images found'
-    return random.choice(parsed['responseData']['results'][:10])['unescapedUrl']
+License:
+    GNU General Public License (Version 3)
+"""
 
 
-# @hook.command("google", "g", "search")
-def google(text):
-    """<query> - returns the first google search result for <query>"""
 
-    parsed = api_get('web', text)
-    if not 200 <= parsed['responseStatus'] < 300:
-        raise IOError('error searching for pages: {}: {}'.format(parsed['responseStatus'], ''))
-    if not parsed['responseData']['results']:
-        return 'No results found.'
+import requests
 
-    result = parsed['responseData']['results'][0]
+from cloudbot import hook
+from cloudbot.util import formatting, filesize
 
-    title = http.unescape(result['titleNoFormatting'])
-    title = formatting.truncate_str(title, 60)
-    content = http.unescape(result['content'])
+API_CS = 'https://www.googleapis.com/customsearch/v1'
+
+
+@hook.on_start()
+def load_api(bot):
+    global dev_key
+    global cx
+
+    dev_key = bot.config.get("api_keys", {}).get("google_dev_key", None)
+    cx = bot.config.get("api_keys", {}).get("google_cse_id", None)
+
+@hook.command('g', 'google')
+def gse(text):
+    """<query> -- Returns first Google search result for <query>."""
+    if not dev_key:
+        return "This command requires a Google Developers Console API key."
+    if not cx:
+        return "This command requires a custom Google Search Engine ID."
+
+    parsed = requests.get(API_CS, params={"cx": cx, "q": text, "key": dev_key}).json()
+
+    try:
+        result = parsed['items'][0]
+    except KeyError:
+        return "No results found."
+
+    title = formatting.truncate_str(result['title'], 60)
+    content = result['snippet']
 
     if not content:
         content = "No description available."
     else:
-        content = http.html.fromstring(content).text_content()
-        content = formatting.truncate_str(content, 150).replace('\n', '')
-    return '{} -- \x02{}\x02: "{}"'.format(result['unescapedUrl'], title, content)
+        content = formatting.truncate_str(content.replace('\n', ''), 240)
+
+    return u'\x02Google search result\x02 for \x02{}\x02 \x02\x0312|\x03\x02 {} · {} \x02\x0312|\x03\x02 {}'.format(
+            text, title, content, result['link'])
+
+
+@hook.command('gis', 'googleimage')
+def gse_gis(text):
+    """<query> -- Returns first Google Images result for <query>."""
+    if not dev_key:
+        return "This command requires a Google Developers Console API key."
+    if not cx:
+        return "This command requires a custom Google Search Engine ID."
+
+    parsed = requests.get(API_CS, params={"cx": cx, "q": text, "searchType": "image", "key": dev_key}).json()
+
+    try:
+        result = parsed['items'][0]
+    except KeyError:
+        return "No results found."
+
+    return u'\x02Google image result\x02 for \x02{}\x02 \x02\x0312|\x03\x02 {}'.format(text, result['link'])
+
+

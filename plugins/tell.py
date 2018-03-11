@@ -1,11 +1,12 @@
+import re
 from datetime import datetime
-
 from sqlalchemy import Table, Column, String, Boolean, DateTime
+
 from sqlalchemy.sql import select
 
 from cloudbot import hook
-from cloudbot.event import EventType
 from cloudbot.util import timeformat, database
+from cloudbot.event import EventType
 
 table = Table(
     'tells',
@@ -27,7 +28,7 @@ def load_cache(db):
     """
     global tell_cache
     tell_cache = []
-    for row in db.execute(table.select().where(table.c.is_read == 0)):
+    for row in db.execute(table.select().where(table.c.is_read == False)):
         conn = row["connection"]
         target = row["target"]
         tell_cache.append((conn, target))
@@ -37,7 +38,7 @@ def get_unread(db, server, target):
     query = select([table.c.sender, table.c.message, table.c.time_sent]) \
         .where(table.c.connection == server.lower()) \
         .where(table.c.target == target.lower()) \
-        .where(table.c.is_read == 0) \
+        .where(table.c.is_read == False) \
         .order_by(table.c.time_sent)
     return db.execute(query).fetchall()
 
@@ -46,7 +47,7 @@ def count_unread(db, server, target):
     query = select([table]) \
         .where(table.c.connection == server.lower()) \
         .where(table.c.target == target.lower()) \
-        .where(table.c.is_read == 0) \
+        .where(table.c.is_read == False) \
         .alias("count") \
         .count()
     return db.execute(query).fetchone()[0]
@@ -56,19 +57,18 @@ def read_all_tells(db, server, target):
     query = table.update() \
         .where(table.c.connection == server.lower()) \
         .where(table.c.target == target.lower()) \
-        .where(table.c.is_read == 0) \
-        .values(is_read=1)
+        .where(table.c.is_read == False) \
+        .values(is_read=True)
     db.execute(query)
     db.commit()
     load_cache(db)
-
 
 def read_tell(db, server, target, message):
     query = table.update() \
         .where(table.c.connection == server.lower()) \
         .where(table.c.target == target.lower()) \
         .where(table.c.message == message) \
-        .values(is_read=1)
+        .values(is_read=True)
     db.execute(query)
     db.commit()
     load_cache(db)
@@ -86,7 +86,6 @@ def add_tell(db, server, sender, target, message):
     db.execute(query)
     db.commit()
     load_cache(db)
-
 
 def tell_check(conn, nick):
     for _conn, _target in tell_cache:
@@ -106,7 +105,7 @@ def tellinput(event, conn, db, nick, notice):
     if 'showtells' in event.content.lower():
         return
 
-    if tell_check(conn.name, nick):
+    if tell_check(conn.name, nick): 
         tells = get_unread(db, conn.name, nick)
     else:
         return
@@ -122,7 +121,7 @@ def tellinput(event, conn, db, nick, notice):
 
         reply = "{} sent you a message {} ago: {}".format(user_from, reltime_formatted, message)
         if len(tells) > 1:
-            reply += " (+{} more, {}showtells to view)".format(len(tells) - 1, conn.config["command_prefix"][0])
+            reply += " (+{} more, {}showtells to view)".format(len(tells) - 1, conn.config["command_prefix"])
 
         read_tell(db, conn.name, nick, message)
         notice(reply)
@@ -130,7 +129,7 @@ def tellinput(event, conn, db, nick, notice):
 
 @hook.command(autohelp=False)
 def showtells(nick, notice, db, conn):
-    """- View all pending tell messages (sent in a notice)."""
+    """showtells -- View all pending tell messages (sent in a notice)."""
 
     tells = get_unread(db, conn.name, nick)
 
@@ -147,30 +146,35 @@ def showtells(nick, notice, db, conn):
 
 
 @hook.command("tell")
-def tell_cmd(text, nick, db, notice, conn, notice_doc, is_nick_valid):
-    """<nick> <message> - Relay <message> to <nick> when <nick> is around."""
+def tell_cmd(text, nick, db, notice, conn):
+    """tell <nick> <message> -- Relay <message> to <nick> when <nick> is around."""
     query = text.split(' ', 1)
-    if query[0].lower() == "paradox":
-        return "Paradox doesn't want to hear from me. Just send him a fucking message."
+
     if len(query) != 2:
-        notice_doc()
+        notice(conn.config("command_prefix") + tell_cmd.__doc__)
         return
 
-    target = query[0]
+    target = query[0].lower()
     message = query[1].strip()
     sender = nick
 
-    if target.lower() == sender.lower():
+    if target == sender.lower():
         notice("Have you looked in a mirror lately?")
         return
 
-    if not is_nick_valid(target.lower()) or target.lower() == conn.nick.lower():
+    if target.lower() == conn.nick.lower():
+        # we can't send messages to ourselves
         notice("Invalid nick '{}'.".format(target))
         return
 
-    if count_unread(db, conn.name, target.lower()) >= 10:
+    if not re.match("^[a-z0-9_|.\-\]\[]*$", target.lower()):
+        notice("Invalid nick '{}'.".format(target))
+        return
+
+    if count_unread(db, conn.name, target) >= 10:
         notice("Sorry, {} has too many messages queued already.".format(target))
         return
 
-    add_tell(db, conn.name, sender, target.lower(), message)
+    add_tell(db, conn.name, sender, target, message)
     notice("Your message has been saved, and {} will be notified once they are active.".format(target))
+

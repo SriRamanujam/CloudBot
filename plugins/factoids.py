@@ -75,7 +75,7 @@ def del_factoid(db, chan, word):
     load_cache(db)
 
 
-@hook.command("r", "remember", permissions=["op", "chanop"])
+@hook.command("remember", permissions=["op"])
 def remember(text, nick, db, chan, notice):
     """<word> [+]<data> - remembers <data> with <word> - add + to <data> to append. If the input starts with <act> the message will be sent as an action. If <user> in in the message it will be replaced by input arguments when command is called."""
     global factoid_cache
@@ -177,12 +177,3 @@ def listfactoids(notice, chan):
             reply_text.append(word)
             reply_text_length += added_length
     notice(", ".join(reply_text))
-
-
-@hook.command("listdetailedfacts", autohelp=False)
-def listdetailedfactoids(chan):
-    """- lists all available factoids with their respective data"""
-    headers = ("Command", "Output")
-    data = [(FACTOID_CHAR + fact[0], fact[1]) for fact in sorted(factoid_cache[chan].items())]
-    table = gen_markdown_table(headers, data).encode('UTF-8')
-    return web.paste(table, "md", "hastebin")

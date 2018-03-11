@@ -18,15 +18,11 @@ def load_api(bot):
     consumer_key = bot.config.get("api_keys", {}).get("twitter_consumer_key", None)
     consumer_secret = bot.config.get("api_keys", {}).get("twitter_consumer_secret", None)
 
-    oauth_token = bot.config.get("api_keys", {}).get("twitter_access_token", None)
-    oauth_secret = bot.config.get("api_keys", {}).get("twitter_access_secret", None)
-
-    if not all((consumer_key, consumer_secret, oauth_token, oauth_secret)):
+    if not all((consumer_key, consumer_secret)):
         tw_api = None
         return
     else:
         auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-        auth.set_access_token(oauth_token, oauth_secret)
 
         tw_api = tweepy.API(auth)
 
@@ -46,7 +42,7 @@ def twitter_url(match):
     return format_tweet(tweet, user)
 
 
-@hook.command("twitter", "tw", "twatter")
+@hook.command("twitter", "tw")
 def twitter(text, reply):
     """<user> [n] - Gets last/[n]th tweet from <user>"""
 
@@ -105,16 +101,6 @@ def twitter(text, reply):
         except IndexError:
             tweet_count = len(user_timeline)
             return "The user \x02{}\x02 only has \x02{}\x02 tweets.".format(user.screen_name, tweet_count)
-
-    elif re.match(r'^#\w+$', text):
-        # user is searching by hashtag
-        search = tw_api.search(text)
-
-        if not search:
-            return "No tweets found."
-
-        tweet = random.choice(search)
-        user = tweet.user
     else:
         # ???
         return "Invalid Input"
@@ -171,3 +157,30 @@ def twuser(text, reply):
     return "{}@\x02{}\x02 ({}){} has \x02{:,}\x02 tweets and \x02{:,}\x02 followers.{}" \
            "".format(prefix, user.screen_name, user.name, loc_str, user.statuses_count, user.followers_count,
                      desc_str)
+
+
+@hook.command("tws", "twsearch")
+def twsearch(text):
+    """tws <search term> -- Search twitter for things. Works exactly like search.twitter.com except you only get the newest result"""
+
+    if tw_api is None:
+        return
+
+    try:
+        results = tw_api.search(text)
+    except tweepy.error.TweepError as e:
+        return "Error: {}".format(e.reason)
+
+    tweet = results[0]
+    user = tweet.user
+    text = " ".join(tweet.text.split())
+
+    if user.verified:
+        prefix = "\u2713"
+    else:
+        prefix = ""
+
+    time = timeformat.time_since(tweet.created_at, datetime.utcnow())
+
+    return "Twitter search result: {}@\x02{}\x02 ({}): {} ({} ago)".format(prefix, user.screen_name, user.name, text, time)
+
