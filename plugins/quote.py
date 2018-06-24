@@ -56,6 +56,17 @@ def list_quotes(db, reply, chan):
                 index + 1, quote.msg))
 
     req = requests.post('http://sprunge.us', 'sprunge={}'.format(lines))
+    try:
+        req.raise_for_status()
+    except requests.exceptions.HTTPError:
+        # try ix.io as a backup
+        req = requests.post('http://ix.io', 'f:1={}'.format(lines))
+        try:
+            req.raise_for_status()
+        except requests.exceptions.HTTPError:
+            reply('Could not upload quote list. :(')
+            return
+
     url = req.content.decode('utf-8')
 
     reply('Quote list: {}'.format(url))
